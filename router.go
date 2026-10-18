@@ -3,7 +3,7 @@
 package main
 
 import (
-	handler "github.com/StarRainer/CrystaLoop/biz/handler"
+	"github.com/StarRainer/CrystaLoop/internal/trigger/http/handler"
 	"github.com/cloudwego/hertz/pkg/app/server"
 )
 

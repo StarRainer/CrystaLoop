@@ -3,4 +3,4 @@
 hz version: v0.9.7
 handlerDir: ""
 modelDir: ""
-routerDir: ""
+routerDir: internal/trigger/http/router

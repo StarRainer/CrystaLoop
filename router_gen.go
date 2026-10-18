@@ -3,7 +3,7 @@
 package main
 
 import (
-	router "github.com/StarRainer/CrystaLoop/biz/router"
+	router "github.com/StarRainer/CrystaLoop/internal/trigger/http/router"
 	"github.com/cloudwego/hertz/pkg/app/server"
 )
 
