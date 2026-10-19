@@ -2,7 +2,10 @@ module github.com/StarRainer/CrystaLoop
 
 go 1.27.2
 
-require github.com/cloudwego/hertz v0.10.6
+require (
+	github.com/apache/thrift v0.13.0
+	github.com/cloudwego/hertz v0.10.6
+)
 
 require (
 	github.com/bytedance/gopkg v0.1.4 // indirect
