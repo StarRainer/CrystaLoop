@@ -1,61 +1,112 @@
 .DEFAULT_GOAL := help
-.DELETE_ON_ERROR:
 
-# Project settings. Override from the command line when needed, for example:
-# make build APP_NAME=crystaloop-dev
+# ==============================================================================
+# Project configuration
+# ==============================================================================
+# Variables declared with ?= can be overridden from the command line,
+# for example: make build APP_NAME=crystaloop-dev
 APP_NAME ?= crystaloop
 OUTPUT_DIR ?= output
+
+# Package pattern used by formatting, vet, test, and coverage targets.
 PACKAGES ?= ./...
 
-# Toolchain settings.
+# ==============================================================================
+# Toolchain
+# ==============================================================================
+# Executable names may be overridden when tools are outside PATH.
 GO ?= go
 HZ ?= hz
-HZ_VERSION ?= v0.9.7
 
-# Hertz code-generation settings. Router output is configured in .hz.
+# Pin code generators so every developer produces the same output.
+HZ_VERSION ?= v0.9.7
+THRIFT_GO_VERSION ?= v0.4.5
+
+# ==============================================================================
+# Hertz code generation
+# ==============================================================================
+# IDL is the primary Thrift file passed to hz. The namespace declared in the
+# IDL is appended to HANDLER_DIR and MODEL_DIR by the generator.
 IDL ?= api/hello/hello.thrift
 HANDLER_DIR ?= internal/trigger/http/handler
 MODEL_DIR ?= internal/trigger/dto
 
-# Derived artifact paths.
+# The router output directory is persisted by hz in the .hz file.
+
+# ==============================================================================
+# Build artifacts
+# ==============================================================================
+# Windows binaries use the .exe suffix; other platforms use no suffix.
 BINARY_EXT :=
 ifeq ($(OS),Windows_NT)
 BINARY_EXT := .exe
 endif
+
 BINARY := $(OUTPUT_DIR)/$(APP_NAME)$(BINARY_EXT)
 COVERAGE_FILE := $(OUTPUT_DIR)/coverage.out
+COVERAGE_HTML := $(OUTPUT_DIR)/coverage.html
 
-.PHONY: help all deps tools generate fmt fmt-check tidy verify vet test coverage build run check ci clean
+# ==============================================================================
+# Help
+# ==============================================================================
+.PHONY: help
 
-help: ## Show available targets.
+help:
 	@printf '%s\n' \
 		'Usage: make <target>' \
 		'' \
-		'Targets:' \
-		'  all         Run checks and build the application.' \
-		'  deps        Download Go module dependencies.' \
-		'  tools       Install the pinned Hertz code generator.' \
-		'  generate    Regenerate Hertz code from the Thrift IDL.' \
-		'  fmt         Format all Go packages.' \
-		'  fmt-check   Fail when tracked Go files are not formatted.' \
-		'  tidy        Synchronize go.mod and go.sum.' \
-		'  verify      Verify downloaded module dependencies.' \
-		'  vet         Run go vet.' \
-		'  test        Run all tests.' \
-		'  coverage    Run tests and write an HTML-ready coverage profile.' \
-		'  build       Build the application into output/.' \
-		'  run         Run the application locally.' \
-		'  check       Run formatting, module, vet, and test checks.' \
-		'  ci          Run checks and build the application.' \
-		'  clean       Remove generated build and coverage artifacts.'
+		'Common workflow:' \
+		'  make setup      Install tools and download dependencies.' \
+		'  make generate   Regenerate code after changing the IDL.' \
+		'  make run        Start the service locally.' \
+		'  make check      Run all non-mutating quality checks.' \
+		'  make build      Build the application binary.' \
+		'' \
+		'Setup:' \
+		'  setup           Install pinned tools and download dependencies.' \
+		'  tools           Install hz and thriftgo at pinned versions.' \
+		'  deps            Download modules declared in go.mod.' \
+		'' \
+		'Development:' \
+		'  generate        Generate models, handlers, and routes from the IDL.' \
+		'  run             Run the service from source.' \
+		'  fmt             Format all Go packages.' \
+		'  tidy            Update go.mod and go.sum to match source imports.' \
+		'' \
+		'Quality:' \
+		'  check           Run fmt-check, verify, vet, and test.' \
+		'  fmt-check       Fail if tracked Go files need formatting.' \
+		'  verify          Verify downloaded modules against go.sum.' \
+		'  vet             Run Go static analysis.' \
+		'  test            Run all Go tests.' \
+		'  coverage        Run tests and write an HTML coverage report.' \
+		'' \
+		'Build and CI:' \
+		'  build           Build the application into output/.' \
+		'  ci              Run quality checks, then build.' \
+		'  clean           Remove build and coverage artifacts.'
 
-all: check build
+# ==============================================================================
+# Setup
+# ==============================================================================
+# setup is the single entry point for preparing a new development environment.
+.PHONY: setup tools deps
+
+setup: tools deps
+
+tools:
+	$(GO) install github.com/cloudwego/hertz/cmd/hz@$(HZ_VERSION)
+	$(GO) install github.com/cloudwego/thriftgo@$(THRIFT_GO_VERSION)
 
 deps:
 	$(GO) mod download
 
-tools:
-	$(GO) install github.com/cloudwego/hertz/cmd/hz@$(HZ_VERSION)
+# ==============================================================================
+# Development
+# ==============================================================================
+# Regenerate all Hertz-owned files after changing the primary IDL. Do not edit
+# files marked "Code generated" because the next update will overwrite them.
+.PHONY: generate run fmt tidy
 
 generate:
 	$(HZ) update \
@@ -64,18 +115,33 @@ generate:
 		--model_dir "$(MODEL_DIR)" \
 		--sort_router
 
+run:
+	$(GO) run .
+
 fmt:
 	$(GO) fmt $(PACKAGES)
 
+# tidy intentionally remains separate from check because it modifies go.mod and
+# go.sum instead of only validating the working tree.
+tidy:
+	$(GO) mod tidy
+
+# ==============================================================================
+# Quality checks
+# ==============================================================================
+# check is safe for local use and CI: its dependencies do not modify source.
+.PHONY: check fmt-check verify vet test coverage
+
+check: fmt-check verify vet test
+
+# Only tracked files are checked so temporary generated files do not create
+# unrelated formatting failures.
 fmt-check:
 	@files="$$(gofmt -l $$(git ls-files '*.go'))"; \
 	if [ -n "$$files" ]; then \
 		printf '%s\n' 'The following Go files need formatting:' "$$files"; \
 		exit 1; \
 	fi
-
-tidy:
-	$(GO) mod tidy
 
 verify:
 	$(GO) mod verify
@@ -86,22 +152,34 @@ vet:
 test:
 	$(GO) test $(PACKAGES)
 
+# coverage.out is the machine-readable profile consumed by Go tooling.
+# coverage.html is the human-readable report that should be opened in a browser.
 coverage: | $(OUTPUT_DIR)
 	$(GO) test -coverprofile="$(COVERAGE_FILE)" $(PACKAGES)
 	$(GO) tool cover -func="$(COVERAGE_FILE)"
+	$(GO) tool cover -html="$(COVERAGE_FILE)" -o "$(COVERAGE_HTML)"
+	@printf '%s\n' 'Coverage report: $(COVERAGE_HTML)'
+
+# ==============================================================================
+# Build and CI
+# ==============================================================================
+# The order-only prerequisite creates OUTPUT_DIR without making its timestamp
+# determine whether the build recipe is out of date.
+.PHONY: build ci clean
 
 build: | $(OUTPUT_DIR)
 	$(GO) build -o "$(BINARY)" .
 
-run:
-	$(GO) run .
-
-check: fmt-check verify vet test
-
 ci: check build
 
+# OUTPUT_DIR contains generated artifacts only, so clean removes it completely.
 clean:
-	$(RM) "$(BINARY)" "$(COVERAGE_FILE)"
+	$(RM) -r "$(OUTPUT_DIR)"
 
+# ==============================================================================
+# Internal targets
+# ==============================================================================
+# build and coverage use this real directory target as an order-only
+# prerequisite. $@ expands to the target name, which is OUTPUT_DIR here.
 $(OUTPUT_DIR):
 	mkdir -p "$@"
