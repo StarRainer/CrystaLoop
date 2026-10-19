@@ -21,7 +21,9 @@ func Hello(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp := new(hello.HelloResponse)
+	resp := &hello.HelloResponse{
+		Message: "Hello, " + req.Name + "!",
+	}
 
 	c.JSON(consts.StatusOK, resp)
 }
