@@ -1,0 +1,22 @@
+# Version-control and editor metadata
+.git
+.github
+.idea
+.vscode
+
+# Local build and test artifacts
+output
+*.exe
+*.test
+*.prof
+*.log
+
+# Machine-local configuration must be mounted or injected at runtime.
+*.local.yml
+dumped_hertz_remote_config.json
+
+# Files not needed to compile the service
+Dockerfile
+.dockerignore
+README.md
+LICENSE
