@@ -1,0 +1,102 @@
+# Check the Go code and verify that the Docker image can build and start.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Keep only the newest run for each branch or pull request so superseded
+# commits do not consume runner time or report stale results.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# This workflow validates repository contents but never modifies them. A future
+# release workflow should declare its own write permissions explicitly.
+permissions:
+  contents: read
+
+# Pin third-party actions to immutable commit SHAs. The adjacent version
+# comments preserve readability and make dependency upgrades easier to review.
+jobs:
+  go:
+    name: Go checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Run quality checks
+        run: make check
+
+      - name: Build application
+        run: make build
+
+  container:
+    name: Container image
+    needs: go
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build container image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          # Load the image into the runner so the next step can start it.
+          load: true
+          push: false
+          tags: crystaloop:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test container
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          container_id="$(docker run --detach --publish 127.0.0.1:8888:8888 crystaloop:ci)"
+
+          # Remove the temporary container whether the assertion passes or fails.
+          cleanup() {
+            docker rm --force "${container_id}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          # The process can be running before Hertz is ready to accept requests.
+          for attempt in {1..15}; do
+            if response="$(curl --fail --silent http://127.0.0.1:8888/ping)"; then
+              if [[ "${response}" == '{"message":"pong"}' ]]; then
+                exit 0
+              fi
+
+              printf 'Unexpected response: %s\n' "${response}"
+              exit 1
+            fi
+
+            sleep 1
+          done
+
+          docker logs "${container_id}"
+          exit 1
