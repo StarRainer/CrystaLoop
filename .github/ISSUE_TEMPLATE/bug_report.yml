@@ -1,0 +1,73 @@
+name: Bug report
+description: Report a reproducible problem in CrystaLoop.
+title: "bug: "
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve CrystaLoop. Please provide enough detail to reproduce the problem.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Problem
+      description: Describe what went wrong and where it happened.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest sequence of steps that reproduces the problem.
+      placeholder: |
+        1. Run ...
+        2. Send ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Describe what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Describe what happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the commit, Go version, operating system, and relevant configuration.
+      placeholder: |
+        Commit: ...
+        Go: ...
+        OS: ...
+        Configuration: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or additional context
+      description: Add relevant logs, stack traces, screenshots, or other context. Remove secrets and personal data.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I removed secrets and personal data from the report.
+          required: true
