@@ -3,24 +3,21 @@ name: CI
 
 on:
   pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
   workflow_dispatch:
 
-# Keep only the newest run for each branch or pull request so superseded
-# commits do not consume runner time or report stale results.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# This workflow validates repository contents but never modifies them. A future
-# release workflow should declare its own write permissions explicitly.
 permissions:
   contents: read
 
-# Pin third-party actions to immutable commit SHAs. The adjacent version
-# comments preserve readability and make dependency upgrades easier to review.
+# Pin third-party actions to immutable commit SHAs.
 jobs:
   go:
     name: Go checks
@@ -39,8 +36,17 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - name: Run quality checks
-        run: make check
+      - name: Check Go formatting
+        run: make fmt-check
+
+      - name: Verify Go modules
+        run: make verify
+
+      - name: Run Go static analysis
+        run: make vet
+
+      - name: Run Go tests
+        run: make test
 
       - name: Build application
         run: make build
@@ -64,39 +70,25 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
+          cache-from: type=gha,scope=crystaloop-ci
+          cache-to: type=gha,mode=max,scope=crystaloop-ci
           # Load the image into the runner so the next step can start it.
           load: true
           push: false
           tags: crystaloop:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
-      - name: Smoke test container
+      - name: Start container
         shell: bash
-        run: |
-          set -euo pipefail
+        run: docker run --detach --name crystaloop-ci --publish 127.0.0.1:8888:8888 crystaloop:ci
 
-          container_id="$(docker run --detach --publish 127.0.0.1:8888:8888 crystaloop:ci)"
+      - name: Verify ping endpoint
+        shell: bash
+        run: test "$(curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8888/ping)" = '{"message":"pong"}'
 
-          # Remove the temporary container whether the assertion passes or fails.
-          cleanup() {
-            docker rm --force "${container_id}" >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
+      - name: Show container logs on failure
+        if: ${{ failure() }}
+        run: docker logs crystaloop-ci || true
 
-          # The process can be running before Hertz is ready to accept requests.
-          for attempt in {1..15}; do
-            if response="$(curl --fail --silent http://127.0.0.1:8888/ping)"; then
-              if [[ "${response}" == '{"message":"pong"}' ]]; then
-                exit 0
-              fi
-
-              printf 'Unexpected response: %s\n' "${response}"
-              exit 1
-            fi
-
-            sleep 1
-          done
-
-          docker logs "${container_id}"
-          exit 1
+      - name: Remove test container
+        if: ${{ always() }}
+        run: docker rm --force crystaloop-ci || true
