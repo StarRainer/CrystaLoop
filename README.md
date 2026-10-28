@@ -57,6 +57,17 @@ docker build -t crystaloop .
 docker run --rm -p 8888:8888 crystaloop
 ```
 
+Or use Docker Compose to build and run the service:
+
+```sh
+docker compose up --build
+```
+
+The Compose service runs with a read-only root filesystem, no Linux
+capabilities, and an ephemeral `/tmp` directory. Set `CRYSTALOOP_PORT` to
+publish the service on a different local port (for example,
+`CRYSTALOOP_PORT=8080 docker compose up --build`).
+
 The [CI workflow](.github/workflows/ci.yml) runs the Go checks and build, then builds and smoke-tests the container image through `/ping`.
 
 ## License

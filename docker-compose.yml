@@ -1,0 +1,20 @@
+services:
+  crystaloop:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: crystaloop:local
+    ports:
+      # Override only the host-facing port; the service listens on 8888 in-container.
+      - "${CRYSTALOOP_PORT:-8888}:8888"
+    # The distroless runtime has no shell or HTTP client. Add an application-owned
+    # probe binary before introducing a healthcheck; a curl-based check would fail.
+    restart: unless-stopped
+    # Keep the runtime aligned with the non-root, distroless image in the Dockerfile.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
